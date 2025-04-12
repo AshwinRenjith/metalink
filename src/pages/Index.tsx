@@ -1,8 +1,7 @@
-
 import React from 'react';
 import Navbar from '@/components/Navbar';
 import Hero from '@/components/Hero';
-import { ArrowUpRight, Globe, Shield, Users } from 'lucide-react';
+import { ArrowUpRight, Globe, Shield, Users, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import MetalinkLogo from '@/components/MetalinkLogo';
