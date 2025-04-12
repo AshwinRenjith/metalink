@@ -2,29 +2,17 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Menu, X, Wallet } from "lucide-react";
+import { Menu, Settings, X, Wallet } from "lucide-react";
 import MetalinkLogo from './MetalinkLogo';
+import { useWallet } from '@/hooks/useWallet';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const { isConnected, account, isLoading, connectWallet, disconnectWallet } = useWallet();
   
-  const connectWallet = async () => {
-    if (window.ethereum) {
-      try {
-        const accounts = await window.ethereum.request({ 
-          method: 'eth_requestAccounts' 
-        });
-        setIsConnected(true);
-        console.log('Connected to wallet:', accounts[0]);
-      } catch (error) {
-        console.error('Error connecting to wallet:', error);
-      }
-    } else {
-      console.error('MetaMask not detected');
-      // In a real app, we would show a toast or modal here
-      alert('MetaMask not detected. Please install MetaMask to use this feature.');
-    }
+  // Format account address for display
+  const formatAccount = (address: string) => {
+    return address ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : '';
   };
 
   return (
@@ -51,21 +39,36 @@ const Navbar = () => {
             <Link to="/transactions" className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
               Transactions
             </Link>
+            {isConnected && (
+              <Link to="/settings" className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                Settings
+              </Link>
+            )}
           </div>
           
           <div className="hidden md:flex items-center ml-4">
             {isConnected ? (
-              <Button variant="outline" className="text-green-400 border-green-400/30">
-                <Wallet className="mr-2 h-4 w-4" />
-                Connected
-              </Button>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-slate-300 bg-slate-800/50 px-3 py-1 rounded-md border border-slate-700">
+                  {formatAccount(account || '')}
+                </span>
+                <Button 
+                  onClick={disconnectWallet} 
+                  variant="outline"
+                  className="text-green-400 border-green-400/30"
+                >
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Disconnect
+                </Button>
+              </div>
             ) : (
               <Button 
                 onClick={connectWallet} 
                 className="metalink-connect-button"
+                disabled={isLoading}
               >
                 <Wallet className="mr-2 h-4 w-4" />
-                Connect Wallet
+                {isLoading ? 'Connecting...' : 'Connect Wallet'}
               </Button>
             )}
           </div>
@@ -114,12 +117,34 @@ const Navbar = () => {
             >
               Transactions
             </Link>
+            {isConnected && (
+              <Link 
+                to="/settings" 
+                className="text-slate-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+                onClick={() => setIsOpen(false)}
+              >
+                <Settings className="inline-block mr-2 h-4 w-4" />
+                Settings
+              </Link>
+            )}
             <div className="pt-4">
               {isConnected ? (
-                <Button variant="outline" className="w-full text-green-400 border-green-400/30">
-                  <Wallet className="mr-2 h-4 w-4" />
-                  Connected
-                </Button>
+                <div className="space-y-2">
+                  <div className="text-sm text-slate-300 bg-slate-800/50 px-3 py-2 rounded-md border border-slate-700">
+                    {formatAccount(account || '')}
+                  </div>
+                  <Button 
+                    onClick={() => {
+                      disconnectWallet();
+                      setIsOpen(false);
+                    }} 
+                    variant="outline" 
+                    className="w-full text-green-400 border-green-400/30"
+                  >
+                    <Wallet className="mr-2 h-4 w-4" />
+                    Disconnect
+                  </Button>
+                </div>
               ) : (
                 <Button 
                   onClick={() => {
@@ -127,9 +152,10 @@ const Navbar = () => {
                     setIsOpen(false);
                   }} 
                   className="w-full metalink-connect-button"
+                  disabled={isLoading}
                 >
                   <Wallet className="mr-2 h-4 w-4" />
-                  Connect Wallet
+                  {isLoading ? 'Connecting...' : 'Connect Wallet'}
                 </Button>
               )}
             </div>

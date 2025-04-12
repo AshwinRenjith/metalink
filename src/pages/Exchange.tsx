@@ -1,7 +1,7 @@
 
 import React from 'react';
 import Navbar from '@/components/Navbar';
-import ExchangeForm from '@/components/ExchangeForm';
+import ExchangeWrapper from '@/components/ExchangeWrapper';
 import { Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -80,7 +80,7 @@ const Exchange = () => {
           </div>
           
           <div className="order-1 lg:order-2">
-            <ExchangeForm />
+            <ExchangeWrapper />
           </div>
         </div>
       </div>
