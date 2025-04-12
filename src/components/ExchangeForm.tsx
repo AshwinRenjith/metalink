@@ -16,9 +16,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CURRENCIES } from '@/lib/constants';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
-const ExchangeForm = () => {
+interface ExchangeFormProps {
+  onExchange?: (fromCurrency: string, toCurrency: string, amount: string) => Promise<void>;
+}
+
+const ExchangeForm = ({ onExchange }: ExchangeFormProps) => {
   const { toast } = useToast();
   const [fromCurrency, setFromCurrency] = useState('BRL');
   const [toCurrency, setToCurrency] = useState('RUB');
@@ -47,11 +51,16 @@ const ExchangeForm = () => {
       return;
     }
     
-    // In a real app, this would connect to a blockchain transaction
-    toast({
-      title: "Exchange initiated",
-      description: `Converting ${amount} ${fromCurrency} to ${(parseFloat(amount) * exchangeRate).toFixed(2)} ${toCurrency}`,
-    });
+    if (onExchange) {
+      // If onExchange prop is provided, use it
+      onExchange(fromCurrency, toCurrency, amount);
+    } else {
+      // Default behavior if no onExchange is provided
+      toast({
+        title: "Exchange initiated",
+        description: `Converting ${amount} ${fromCurrency} to ${(parseFloat(amount) * exchangeRate).toFixed(2)} ${toCurrency}`,
+      });
+    }
     
     // Reset form
     setAmount('');
