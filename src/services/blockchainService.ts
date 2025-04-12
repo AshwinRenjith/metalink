@@ -1,6 +1,8 @@
 
 import { toast } from "@/hooks/use-toast";
 
+import { ethers } from 'ethers';
+
 // Interface for transaction objects
 export interface Transaction {
   id: string;
@@ -13,6 +15,28 @@ export interface Transaction {
   hash?: string;
   networkFee?: string;
 }
+
+// ABI for the smart contract
+const CONTRACT_ABI = [
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function balanceOf(address account) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)"
+];
+
+// Contract addresses for different tokens on Goerli testnet
+const TOKEN_CONTRACTS = {
+  BRL: '0x...', // Replace with actual token contract address
+  RUB: '0x...', // Replace with actual token contract address
+  INR: '0x...', // Replace with actual token contract address
+  CNY: '0x...', // Replace with actual token contract address
+  ZAR: '0x...'  // Replace with actual token contract address
+};
+
+// Provider and contract instances
+let provider: ethers.providers.Web3Provider | null = null;
+let signer: ethers.Signer | null = null;
+let contracts: { [key: string]: ethers.Contract } = {};
 
 // Define supported currencies
 export const SUPPORTED_CURRENCIES = ['BRL', 'RUB', 'INR', 'CNY', 'ZAR'];
@@ -60,28 +84,39 @@ export const getCurrentNetwork = async (): Promise<{chainId: string, name: strin
   }
 };
 
-// Get account balance
-export const getBalance = async (address: string): Promise<string> => {
+// Get token balance
+export const getBalance = async (address: string, currency: string): Promise<string> => {
   if (!isMetaMaskInstalled()) {
     throw new Error('MetaMask is not installed');
   }
   
   try {
-    const balance = await window.ethereum.request({
-      method: 'eth_getBalance',
-      params: [address, 'latest']
-    });
+    if (!provider) {
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+    }
+
+    const contractAddress = TOKEN_CONTRACTS[currency];
+    if (!contractAddress) {
+      throw new Error(`No contract address found for ${currency}`);
+    }
+
+    if (!contracts[currency]) {
+      contracts[currency] = new ethers.Contract(contractAddress, CONTRACT_ABI, provider);
+    }
+
+    const decimals = await contracts[currency].decimals();
+    const balance = await contracts[currency].balanceOf(address);
     
-    // Convert from wei to ether
-    const etherValue = parseInt(balance, 16) / 1e18;
-    return etherValue.toFixed(4);
+    // Convert from token units to decimal representation
+    const formattedBalance = ethers.utils.formatUnits(balance, decimals);
+    return parseFloat(formattedBalance).toFixed(4);
   } catch (error) {
     console.error('Error getting balance:', error);
     throw error;
   }
 };
 
-// Send transaction
+// Send transaction using smart contract
 export const sendTransaction = async (
   fromAddress: string,
   toAddress: string,
@@ -97,25 +132,36 @@ export const sendTransaction = async (
   }
   
   try {
-    // This is a simplified example. In a real app, we would:
-    // 1. Convert the amount to the proper decimal places based on the token
-    // 2. Check for sufficient balance
-    // 3. Potentially use a smart contract for token transfers
+    if (!provider) {
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+    }
+
+    if (!signer) {
+      signer = provider.getSigner();
+    }
+
+    const contractAddress = TOKEN_CONTRACTS[currency];
+    if (!contractAddress) {
+      throw new Error(`No contract address found for ${currency}`);
+    }
+
+    if (!contracts[currency]) {
+      contracts[currency] = new ethers.Contract(contractAddress, CONTRACT_ABI, signer);
+    }
+
+    // Get token decimals
+    const decimals = await contracts[currency].decimals();
     
-    // For demo purposes, we'll use ETH transfer
-    const amountInWei = (parseFloat(amount) * 1e18).toString(16);
+    // Convert amount to token units
+    const amountInTokenUnits = ethers.utils.parseUnits(amount, decimals);
     
-    const transactionParameters = {
-      from: fromAddress,
-      to: toAddress,
-      value: `0x${amountInWei}`, // Value in hex
-      gas: '0x5208', // 21000 gas in hex
-    };
-    
+    // Estimate gas
+    const gasEstimate = await contracts[currency].estimateGas.transfer(toAddress, amountInTokenUnits);
+    const gasLimit = gasEstimate.mul(110).div(100); // Add 10% buffer
+
     // Send the transaction
-    const txHash = await window.ethereum.request({
-      method: 'eth_sendTransaction',
-      params: [transactionParameters],
+    const tx = await contracts[currency].transfer(toAddress, amountInTokenUnits, {
+      gasLimit
     });
     
     // Create transaction record
@@ -127,22 +173,32 @@ export const sendTransaction = async (
       currency,
       status: 'pending',
       timestamp: Date.now(),
-      hash: txHash,
-      networkFee: '0.00021' // Simplified; would be calculated in real app
+      hash: tx.hash,
+      networkFee: ethers.utils.formatEther(tx.gasLimit.mul(tx.gasPrice || 0))
     };
     
-    // In a real app, we would save this transaction to a database
-    // For demo, we show a toast
-    toast({
-      title: "Transaction Sent",
-      description: `Your ${currency} transaction has been submitted to the blockchain.`,
-    });
+    // Wait for transaction confirmation
+    const receipt = await tx.wait();
+    
+    if (receipt.status === 1) {
+      toast({
+        title: "Transaction Successful",
+        description: `Your ${currency} transaction has been confirmed on the blockchain.`,
+      });
+      transaction.status = 'completed';
+    } else {
+      toast({
+        title: "Transaction Failed",
+        description: "Transaction was reverted by the network.",
+        variant: "destructive"
+      });
+      transaction.status = 'failed';
+    }
     
     return transaction;
   } catch (error) {
     console.error('Error sending transaction:', error);
     
-    // Show error toast
     toast({
       title: "Transaction Failed",
       description: error instanceof Error ? error.message : "Unknown error occurred",

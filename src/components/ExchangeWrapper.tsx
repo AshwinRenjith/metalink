@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ExchangeForm from './ExchangeForm';
 import { useWallet } from '@/hooks/useWallet';
-import { exchangeCurrency } from '@/services/blockchainService';
+import { exchangeCurrency, getBalance, sendTransaction } from '@/services/blockchainService';
 import { toast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
@@ -9,7 +9,30 @@ import { Button } from './ui/button';
 const ExchangeWrapper = () => {
   const { isConnected, account, connectWallet } = useWallet();
   const [isExchanging, setIsExchanging] = useState(false);
+  const [balances, setBalances] = useState<{[key: string]: string}>({});
   
+  useEffect(() => {
+    const loadBalances = async () => {
+      if (isConnected && account) {
+        try {
+          const balancePromises = ['BRL', 'RUB', 'INR', 'CNY', 'ZAR'].map(currency =>
+            getBalance(account, currency)
+          );
+          const results = await Promise.all(balancePromises);
+          const newBalances = ['BRL', 'RUB', 'INR', 'CNY', 'ZAR'].reduce((acc, curr, idx) => {
+            acc[curr] = results[idx];
+            return acc;
+          }, {} as {[key: string]: string});
+          setBalances(newBalances);
+        } catch (error) {
+          console.error('Error loading balances:', error);
+        }
+      }
+    };
+    
+    loadBalances();
+  }, [isConnected, account]);
+
   const handleExchange = async (
     fromCurrency: string, 
     toCurrency: string, 
@@ -27,14 +50,31 @@ const ExchangeWrapper = () => {
     try {
       setIsExchanging(true);
       
-      // Execute the exchange using our blockchain service
+      // First check if user has sufficient balance
+      const balance = balances[fromCurrency] || '0';
+      if (parseFloat(balance) < parseFloat(amount)) {
+        throw new Error(`Insufficient ${fromCurrency} balance`);
+      }
+      
+      // Execute the token transfer using smart contract
+      const tx = await sendTransaction(account, account, amount, fromCurrency);
+      
+      // After successful transfer, execute the exchange
       await exchangeCurrency(fromCurrency, toCurrency, amount, account);
       
-      // In a real app, we would redirect to the transaction history or show details
       toast({
         title: "Exchange Successful",
-        description: `You've successfully exchanged ${amount} ${fromCurrency} to ${toCurrency}.`
+        description: `Transaction hash: ${tx.hash}\nExchanged ${amount} ${fromCurrency} to ${toCurrency}.`
       });
+      
+      // Refresh balances after exchange
+      const newFromBalance = await getBalance(account, fromCurrency);
+      const newToBalance = await getBalance(account, toCurrency);
+      setBalances(prev => ({
+        ...prev,
+        [fromCurrency]: newFromBalance,
+        [toCurrency]: newToBalance
+      }));
       
     } catch (error) {
       console.error("Exchange error:", error);

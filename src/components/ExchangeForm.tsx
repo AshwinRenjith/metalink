@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { ArrowDownUp, Info } from 'lucide-react';
 import { 
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/tooltip";
 import { CURRENCIES } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
+import { getExchangeRate, convertFiatToEth } from '@/services/exchangeService';
 
 interface ExchangeFormProps {
   onExchange?: (fromCurrency: string, toCurrency: string, amount: string) => Promise<void>;
@@ -27,8 +28,38 @@ const ExchangeForm = ({ onExchange }: ExchangeFormProps) => {
   const [fromCurrency, setFromCurrency] = useState('BRL');
   const [toCurrency, setToCurrency] = useState('RUB');
   const [amount, setAmount] = useState('');
-  const [exchangeRate, setExchangeRate] = useState(13.45); // Mock exchange rate
-  const [fee, setFee] = useState(0.5); // 0.5% fee
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+  const [fee] = useState(0.5); // 0.5% fee
+  const [isLoadingRate, setIsLoadingRate] = useState(false);
+  const [ethAmount, setEthAmount] = useState<string>('0.00');
+
+  // Fetch exchange rate when currencies change
+  useEffect(() => {
+    const updateExchangeRate = async () => {
+      setIsLoadingRate(true);
+      try {
+        const rate = await getExchangeRate(fromCurrency, toCurrency);
+        setExchangeRate(rate);
+        
+        // If there's an amount, update the ETH conversion
+        if (amount) {
+          const ethValue = await convertFiatToEth(parseFloat(amount), fromCurrency);
+          setEthAmount(ethValue.toFixed(8));
+        }
+      } catch (error) {
+        console.error('Error fetching exchange rate:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to fetch exchange rate. Please try again.',
+          variant: 'destructive'
+        });
+      } finally {
+        setIsLoadingRate(false);
+      }
+    };
+    
+    updateExchangeRate();
+  }, [fromCurrency, toCurrency, amount]);
   
   const handleSwapCurrencies = () => {
     setFromCurrency(toCurrency);
@@ -67,7 +98,7 @@ const ExchangeForm = ({ onExchange }: ExchangeFormProps) => {
   };
   
   const calculateOutput = () => {
-    if (!amount) return '0.00';
+    if (!amount || !exchangeRate) return '0.00';
     const inputAmount = parseFloat(amount);
     
     if (isNaN(inputAmount)) return '0.00';
@@ -164,7 +195,17 @@ const ExchangeForm = ({ onExchange }: ExchangeFormProps) => {
             <div className="flex justify-between items-center mb-1">
               <span className="text-sm text-slate-400">Exchange Rate</span>
               <span className="text-sm text-white">
-                1 {fromCurrency} = {exchangeRate} {toCurrency}
+                {isLoadingRate ? (
+                  'Loading...'
+                ) : (
+                  <>1 {fromCurrency} = {exchangeRate?.toFixed(6)} {toCurrency}</>
+                )}
+              </span>
+            </div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-sm text-slate-400">ETH Equivalent</span>
+              <span className="text-sm text-white">
+                ≈ {ethAmount} ETH
               </span>
             </div>
             

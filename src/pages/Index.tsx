@@ -48,7 +48,7 @@ const Index = () => {
             </div>
             <h3 className="text-xl font-bold text-white mb-2">3. Secure Transaction</h3>
             <p className="text-slate-300">
-              Blockchain technology ensures your transaction is secure, transparent, and immutable.
+              Complete your transaction with confidence using our secure and transparent platform.
             </p>
           </div>
         </div>
